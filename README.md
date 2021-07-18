@@ -1,4 +1,4 @@
-# [基于Hazelcast及Kafka实现的分布式锁与集群负载均衡](http://localhost:4000/blog/2021/distributed-hazelcast-lock/)
+# [基于Hazelcast及Kafka实现的分布式锁与集群负载均衡](https://meethigher.top/blog/2021/distributed-hazelcast-lock/)
 
 之所以产出这一博客，是因为公司的项目上线了集群之后出现了问题。
 
