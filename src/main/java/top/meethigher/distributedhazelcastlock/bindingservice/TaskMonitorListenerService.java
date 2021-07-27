@@ -1,6 +1,8 @@
 package top.meethigher.distributedhazelcastlock.bindingservice;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import top.meethigher.distributedhazelcastlock.dto.TaskContent;
@@ -21,7 +23,7 @@ import java.util.Optional;
 @Component
 public class TaskMonitorListenerService {
     private final static String MESSAGE = "没有查询到数据";
-
+    private final static Logger log = LoggerFactory.getLogger(TaskMonitorListenerService.class);
     @Resource
     TaskContentRepository taskContentRepository;
 
@@ -50,7 +52,6 @@ public class TaskMonitorListenerService {
 
     public void execTaskContent(TaskContent taskContent) {
         String taskName = taskContent.getTask().getTaskName();
-        System.out.println("执行【"+taskName+"】->【" + taskContent.getContentDesc() + "】");
-
+        log.info("执行【" + taskName + "】->【" + taskContent.getContentDesc() + "】");
     }
 }

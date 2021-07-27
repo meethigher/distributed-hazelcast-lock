@@ -60,6 +60,9 @@ public class KafkaProducer {
 
             @Override
             public void onSuccess(SendResult<String, Object> stringObjectSendResult) {
+                RecordMetadata recordMetadata = stringObjectSendResult.getRecordMetadata();
+                int partition = recordMetadata.partition();
+                log.info("->发送到分区" + partition);
                 //成功的处理
                 log.info(topic + " - 生产者 发送消息成功：" + stringObjectSendResult.toString());
             }

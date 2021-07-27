@@ -17,6 +17,7 @@ import top.meethigher.distributedhazelcastlock.enums.TaskEnum;
 import top.meethigher.distributedhazelcastlock.respositories.TaskRepository;
 
 import javax.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 
@@ -38,28 +39,30 @@ public class DailyTask {
 
 
     private final static String API_MONITOR_TASK_MAP_NAME = "api_monitor_task_map";
+    //单位毫秒
+    private final static Long DISTRIBUTE_TASK_TIME_INTERVAL = 60000L;
 
     @Async("taskExecutor")
-    @Scheduled(cron = "0 24 23 * * ? ")
+    @Scheduled(cron = "0 20 23 * * ? ")
     public void firstTask() {
         doTask(TaskEnum.FIRST);
     }
 
 
     @Async("taskExecutor")
-    @Scheduled(cron = "0 24 23 * * ?")
+    @Scheduled(cron = "0 20 23 * * ?")
     public void secondTask() {
         doTask(TaskEnum.SECOND);
     }
 
     @Async("taskExecutor")
-    @Scheduled(cron = "0 24 23 * * ?")
+    @Scheduled(cron = "0 20 23 * * ?")
     public void thirdTask() {
         doTask(TaskEnum.THIRD);
     }
 
     @Async("taskExecutor")
-    @Scheduled(cron = "0 24 23 * * ?")
+    @Scheduled(cron = "0 20 23 * * ?")
     public void forthTask() {
         doTask(TaskEnum.FORTH);
     }
@@ -67,43 +70,54 @@ public class DailyTask {
 
     public void doTask(TaskEnum task) {
         if (!ObjectUtils.isEmpty(task)) {
-            IMap<Integer, String> map = hazelcastInstance.getMap(API_MONITOR_TASK_MAP_NAME);
-            map.put(task.code, task.desc);
+            IMap<Integer, Long> map = hazelcastInstance.getMap(API_MONITOR_TASK_MAP_NAME);
+            Long temp = map.get(task.code);
+            Long lastExecTime = ObjectUtils.isEmpty(temp) ? 0L : temp;
+            Long currentTime = System.currentTimeMillis();
+            Long intervalTime = currentTime - lastExecTime;
+            log.info("【" + task.desc + "】,lastExecTime=" + lastExecTime + ",currentTime=" + currentTime + ",intervalTime=" + intervalTime);
             //判断任务是否能锁
             boolean canLocked = map.tryLock(task.code);
-            if (canLocked) {
-                System.out.println("抢到任务分发权限！");
-                doMonitorTask(task);
-                map.unlock(task.code);
-            }else{
-                System.out.println("没有抢到权限");
+            if (intervalTime > DISTRIBUTE_TASK_TIME_INTERVAL && canLocked) {
+                log.info("抢到【" + task.desc + "】分发权限！");
+                try {
+                    map.put(task.code, currentTime);
+                    doMonitorTask(task);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    map.unlock(task.code);
+                    log.info("释放【" + task.desc + "】");
+                }
+            } else {
+                log.info("没有抢到【" + task.desc + "】权限");
             }
         }
     }
 
     public void doMonitorTask(TaskEnum anEnum) {
-        System.out.println("向所有节点分发【" + anEnum.desc + "】..");
+        log.info(LocalDateTime.now() + "向所有节点分发【" + anEnum.desc + "】..");
         Optional<Task> optional = taskRepository.findById(anEnum.code);
         if (optional.isPresent()) {
             Task task = optional.get();
             Set<TaskContent> content = task.getContent();
             pushToKafka(content);
-
         }
+        log.info(LocalDateTime.now() + "分发【" + anEnum.desc + "】完毕");
     }
 
     /**
      * 实现分区间均衡分配
-     * 亲测Apache提供的轮询策略，并没有在分区间均衡分配，并且有很大的几率，所有任务都发送同一分区，这就导致有种极端情况，所有任务都是同一台机器执行，集群无意义
+     * 亲测Apache提供的RoundRobinPartitioner轮询策略，并没有在分区间均衡分配，并且有很大的几率，所有任务都发送同一分区，这就导致有种极端情况，所有任务都是同一台机器执行，集群无意义
+     * spring.kafka.producer.properties.partitioner.class=org.apache.kafka.clients.producer.RoundRobinPartitioner，可以自己多次尝试
      *
      * @param contents
      */
     public void pushToKafka(Set<TaskContent> contents) {
         int i = 0, partition;
         for (TaskContent item : contents) {
-            partition = i % 3;
+            partition = i++ % 3;
             producer.sendAsy(topic.getTopic().getTaskMonitor(), partition, item.getContentId());
-            i++;
         }
     }
 }
